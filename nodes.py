@@ -9,14 +9,13 @@ Provides:
 
 from typing import Any
 
-import torch
-
 import comfy.latent_formats
 import comfy.model_management
 import comfy.sample
 import comfy.samplers
 import comfy.utils
 import latent_preview
+import torch
 from comfy.comfy_types import IO, ComfyNodeABC, InputTypeDict
 
 from .expressions import evaluate_condition, evaluate_number
@@ -35,6 +34,8 @@ class SamplerPeekAdvanced(ComfyNodeABC):
     prediction) is decoded through the VAE and collected into an image
     batch.  Step indices are also recorded.
 
+    Optionally supports step-dependent CFG modulation via cfg_expr.
+
     Inputs:
         noise:        NOISE source
         guider:       GUIDER (e.g., CFGGuider)
@@ -50,6 +51,8 @@ class SamplerPeekAdvanced(ComfyNodeABC):
                       Set to 0 for no upper bound.  Default: 0.
         max_previews: INT. Maximum number of previews to store in RAM.
                       Default: 0 (unlimited).
+        cfg_expr:     STRING (optional). Step-dependent CFG expression.
+                      e.g., "clamp(1 + step / n * 7, 1, 8)".
 
     Outputs:
         output:          LATENT   — final sampled latent
@@ -113,13 +116,28 @@ class SamplerPeekAdvanced(ComfyNodeABC):
                         "tooltip": "Max previews to store in RAM. 0 = unlimited",
                     },
                 ),
-            }
+            },
+            "optional": {
+                "cfg_expr": (
+                    IO.STRING,
+                    {
+                        "multiline": False,
+                        "default": "",
+                        "tooltip": (
+                            "Step-dependent CFG expression. Evaluated at each step "
+                            "to dynamically set the guider CFG. Variables: step, n. "
+                            "e.g., 'clamp(1 + step / n * 7, 1, 8)' for a linear ramp. "
+                            "Empty = use the guider's default CFG."
+                        ),
+                    },
+                ),
+            },
         }
 
     RETURN_TYPES = (IO.LATENT, IO.LATENT, IO.IMAGE, IO.INT)
     RETURN_NAMES = ("output", "denoised_output", "preview_images", "step_indices")
     OUTPUT_TOOLTIPS = (
-        "Final sampled latent",
+        "Final sampled latent (with optional step-dependent CFG applied)",
         "Final x0 prediction",
         "Batch of decoded preview images from intermediate steps",
         "Step indices (1-based) for each preview image",
@@ -128,8 +146,8 @@ class SamplerPeekAdvanced(ComfyNodeABC):
     CATEGORY = "sampling/peek"
     DESCRIPTION = (
         "Extended SamplerCustomAdvanced that decodes intermediate latents "
-        "using a VAE at specified steps.  Useful for visualizing the "
-        "sampling process or creating step-by-step animations."
+        "using a VAE at specified steps, with optional step-dependent CFG.  "
+        "Useful for visualizing the sampling process or creating step-by-step animations."
     )
 
     def sample(
@@ -144,6 +162,7 @@ class SamplerPeekAdvanced(ComfyNodeABC):
         start_step: int = 1,
         end_step: int = 0,
         max_previews: int = 0,
+        cfg_expr: str = "",
     ):
         # ── prepare latent ──────────────────────────────────
         latent = latent_image
@@ -215,6 +234,25 @@ class SamplerPeekAdvanced(ComfyNodeABC):
             except Exception:
                 # If decoding fails, skip this step silently
                 pass
+
+        # ── dynamic CFG (step-dependent) ─────────────────────
+        if cfg_expr:
+            step_counter = {"n": 1}  # 1-based, mutated in closure
+            original_predict = guider.predict_noise
+
+            def dynamic_predict(x, timestep, model_options=None, seed=None):
+                if model_options is None:
+                    model_options = {}
+                current = step_counter["n"]
+                step_counter["n"] += 1
+                try:
+                    new_cfg = evaluate_number(cfg_expr, current, total_steps)
+                    guider.set_cfg(new_cfg)
+                except Exception:
+                    pass  # keep current cfg on error
+                return original_predict(x, timestep, model_options, seed)
+
+            guider.predict_noise = dynamic_predict
 
         # ── run sampling ─────────────────────────────────────
         disable_pbar = not comfy.utils.PROGRESS_BAR_ENABLED

@@ -1,13 +1,13 @@
 [project]
 name = "comfyui-sampler-peek"
-version = "0.1.0"
+version = "0.2.0"
 description = "Peek into ComfyUI sampling loops - decode intermediate latents using a VAE during SamplerCustomAdvanced execution"
 license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.10"
 
 [project.urls]
-Homepage = "https://github.com/Prohect/comfyui-sampler-peek"
+Homepage = "https://github.com/aria4comfyui/comfyui-sampler-peek"
 
 [build-system]
 requires = ["setuptools>=61.0"]

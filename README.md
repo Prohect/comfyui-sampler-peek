@@ -33,7 +33,8 @@ inputs, plus a VAE and decode configuration.
 | decode_expr    | STRING   | Expression for when to decode (see below)     |
 | start_step     | INT      | Only decode at ≥ this step (1-based)          |
 | end_step       | INT      | Only decode at ≤ this step (0 = no limit)     |
-| max_previews   | INT      | Max previews to store in RAM (0 = unlimited) |
+| max_previews   | INT      | Max previews to store in RAM (0 = unlimited)  |
+| cfg_expr       | STRING   | (optional) Step-dependent CFG expression. e.g., `clamp(1 + step / n * 7, 1, 8)` for a linear ramp from 1 to 8 |
 
 | Output           | Type   | Description                                    |
 |------------------|--------|------------------------------------------------|
@@ -86,12 +87,20 @@ evaluator. Available variables and functions:
 - `sin(step / n * pi)` — sine ramp for dynamic schedules
 - `step % 2 == 0` — decode even-numbered steps
 
+### Dynamic CFG
+
+Optionally provide a `cfg_expr` to modulate CFG at each sampling step:
+
+- `clamp(1 + step / n * 7, 1, 8)` — linear ramp from 1 to 8
+- `step < n / 2 ? 1 : 5` — use Python: `5 if step > n/2 else 1`
+- `1 + sin(step / n * pi) * 4` — sinusoidal CFG swing
+
 ## Installation
 
 1. Clone into ComfyUI's `custom_nodes` directory:
    ```bash
    cd ComfyUI/custom_nodes
-   git clone https://github.com/Prohect/comfyui-sampler-peek.git
+   git clone https://github.com/aria4comfyui/comfyui-sampler-peek.git
    ```
 2. Restart ComfyUI.
 
@@ -103,8 +112,9 @@ libraries (PyTorch, etc.).
 1. Replace `SamplerCustomAdvanced` with `SamplerPeekAdvanced` in your workflow.
 2. Connect a VAE to the `vae` input.
 3. Set `decode_expr` to control which steps produce previews.
-4. Connect `preview_images` to a `SaveImage` or `PreviewImage` node.
-5. Queue and watch the sampling process unfold!
+4. (Optional) Set `cfg_expr` for step-dependent CFG modulation.
+5. Connect `preview_images` to a `SaveImage` or `PreviewImage` node.
+6. Queue and watch the sampling process unfold!
 
 ## License
 

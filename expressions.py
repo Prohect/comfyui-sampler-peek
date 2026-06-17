@@ -16,8 +16,7 @@ Examples:
 """
 
 import math
-import operator
-from typing import Any, Callable
+from typing import Any
 
 # Allowed builtins: only safe ones
 _ALLOWED_NAMES: dict[str, Any] = {
